@@ -1,0 +1,54 @@
+version: "3"
+
+services:
+  proxy:
+    image: docker.io/traefik:latest
+    command:
+      - --api.insecure=true
+      - --providers.docker
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.http.address=:80
+      - --entrypoints.https.address=:443
+      - --entrypoints.http.http.redirections.entrypoint.to=https
+      - --entrypoints.http.http.redirections.entrypoint.scheme=https
+      - --accesslog=true
+    ports:
+      - "80:80"
+      - "443:443"
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:18.0.1
+    labels:
+      - traefik.enable=true
+
+      - traefik.http.routers.keycloak.entrypoints=https
+      - traefik.http.routers.keycloak.rule=Host(`${KEYCLOAK_HOSTNAME}`)
+      - traefik.http.routers.keycloak.tls=true
+    command:
+      - start-dev
+      - --hostname=${KEYCLOAK_HOSTNAME}
+      - --proxy=edge
+    environment:
+      DB_DATABASE: "${DB_NAME}"
+      DB_USER: "${DB_USER}"
+      DB_PASSWORD: "${DB_PASSWORD}"
+      DB_ADDR: "keycloak-database"
+      DB_VENDOR: "postgres"
+      KEYCLOAK_ADMIN: "${KEYCLOAK_ADMIN}"
+      KEYCLOAK_ADMIN_PASSWORD: "${KEYCLOAK_ADMIN_PASSWORD}"
+      JAVA_OPTS: "-server -Xms128m -Xmx1024m -XX:MetaspaceSize=128M -XX:MaxMetaspaceSize=512m -Djava.net.preferIPv4Stack=true -Djboss.modules.system.pkgs=org.jboss.byteman -Djava.awt.headless=true"
+
+  keycloak-database:
+    image: postgres:14
+    environment:
+      POSTGRES_DB: "${DB_NAME}"
+      POSTGRES_USER: "${DB_USER}"
+      POSTGRES_PASSWORD: "${DB_PASSWORD}"
+    volumes:
+      - "postgres_data:/var/lib/pgsql"
+
+volumes:
+  postgres_data:
